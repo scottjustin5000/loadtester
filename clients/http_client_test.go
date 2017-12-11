@@ -5,8 +5,16 @@ import (
   "fmt"
 )
 
+func TestGetTimeout(t *testing.T) {
+  client := NewHttpClient(ClientRequest{ReqType: GET, Url: "http://google.com", Timeout:50})
+  _, err := client.MakeRequest()
+  if err == nil {
+    t.Errorf("expected timeout error")
+  }
+}
+
 func TestGet(t *testing.T) {
-  client := NewHttpClient(GET, "http://google.com", "", "")
+  client := NewHttpClient(ClientRequest{ReqType:GET, Url: "http://google.com", Timeout:60000})
   val, err := client.MakeRequest()
   fmt.Println(val)
   if err != nil {
@@ -16,3 +24,4 @@ func TestGet(t *testing.T) {
     t.Errorf("expected duration to be greater than 0 %q", val)
   }
 }
+

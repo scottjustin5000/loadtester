@@ -1,6 +1,8 @@
 package main 
 import (
 "fmt"
+"flag"
+"strings"
 
 "github.com/scottjustin5000/loadtest/tester"
 "github.com/scottjustin5000/loadtest/clients"
@@ -25,14 +27,36 @@ import (
   MaxRequests int
   RequestTimeout int
   Body string
-  ContentType string
   RequestsPerSecond int
   Type clients.RequestType
   RequestsPerSecondDuration float64
-}*/
+}
+***/
+
+func determineRequestType(rt string) clients.RequestType {
+  if strings.EqualFold(rt, "GET") {
+    return clients.GET
+  } else if strings.EqualFold(rt, "POST") {
+    return clients.POST
+  } else if strings.EqualFold(rt, "PUT") {
+    return clients.PUT
+  }
+  return clients.GET
+}
 
 func main() {
- client := loadtest.NewLoadTest(loadtest.LoadTestRequest{Url:"https://google.com", Concurrency:2, MaxRequests:0, Body:"", ContentType: "", RequestsPerSecond:2, Type: clients.GET})
+ urlPtr := flag.String("u", "", "url to be tested")
+ concurrencyPtr := flag.Int("c", 0, "number of concurrent clients")
+ maxRequestPtr := flag.Int("n", 0, "number of requests")
+ requestTimeoutPtr := flag.Int("t", 60000, "timeout per requests (ms)")
+ requestTypePtr := flag.String("rt", "GET", "request type")
+ requestsPerSecondPtr := flag.Int("rps", 0, "requests per second")
+ bodyPtr := flag.String("b", "", "json string representation of request payload")
+
+ requestType := determineRequestType(*requestTypePtr)
+
+
+ client := loadtest.NewLoadTest(loadtest.LoadTestRequest{Url:*urlPtr, RequestTimeout: *requestTimeoutPtr, Concurrency:*concurrencyPtr, MaxRequests:*maxRequestPtr, Body:*bodyPtr, RequestsPerSecond: *requestsPerSecondPtr, Type: requestType})
  x := client.Start()
  fmt.Println(x)
 

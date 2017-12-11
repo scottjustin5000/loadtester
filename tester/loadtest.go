@@ -2,8 +2,6 @@ package loadtest
 import(
 "time"
 "fmt"
-"context"
-"net/http"
 "sync"
 "strconv"
 
@@ -21,7 +19,6 @@ type LoadTestResponse struct {
   MaxRequests int
   RequestTimeout int
   Body string
-  ContentType string
   RequestsPerSecond int
   Type clients.RequestType
   RequestsPerSecondDuration float64
@@ -29,19 +26,38 @@ type LoadTestResponse struct {
 
 type LoadTest struct {
   Options LoadTestRequest
+  client clients.Client
 }
 
 func NewLoadTest(options LoadTestRequest) *LoadTest {
-  tester := &LoadTest{options}
-
+  client, _ := clients.CreateClient(clients.ClientRequest{Type: clients.HTTP, Body: options.Body, Url: options.Url, ReqType: options.Type, Timeout: options.RequestTimeout})
+  tester := &LoadTest{options, client}
   return tester
 }
 
-func makeRequests(requests int, url string)[]RequestResult {
-  //client := clients.NewHttpClient(options.Type, options.Url, options.Body, options.ContentType)
- // x := make([]float64, 0)
+func getConcurrency(concurrency int, maxRequests int) int {
+  temp := (maxRequests - concurrency)
+  if temp > 0 && maxRequests > concurrency {
+    return concurrency
+  } else if temp <= 0 {
+    return maxRequests
+  }
+  return 0
+}
+
+func fetch(client clients.Client, url string) RequestResult {
+  
+  timing, err:= client.MakeRequest()
+  if err != nil {
+    return RequestResult { url, timing, err.Error() }
+  } 
+  return RequestResult { url, timing, "" }
+}
+
+func (tester *LoadTest) makeRequests()[]RequestResult {
+  var options = tester.Options
   results := make([]RequestResult, 0)
-  workers := make([]int, requests)
+  workers := make([]int, options.RequestsPerSecond)
   wg := new(sync.WaitGroup)
   in := make(chan string, 2 * len(workers))
 
@@ -49,10 +65,7 @@ func makeRequests(requests int, url string)[]RequestResult {
     wg.Add(1)
     go func() {
       defer wg.Done()
-      for i := 0; i < len(in); i++ {
-
-        results = append(results, fetch(url, 3000))
-      }
+        results = append(results, fetch(tester.client, options.Url))
     }()
   }
 
@@ -65,56 +78,37 @@ func makeRequests(requests int, url string)[]RequestResult {
   return results
 }
 
-func fetch(url string, timeout int) RequestResult {
-  r, _ := http.NewRequest("GET", url, nil)
+func(tester *LoadTest) doEvery(d time.Duration, f func()[]RequestResult)[]RequestResult {
   timeStart := time.Now()
-  timeoutRequest, cancelFunc := context.WithTimeout(r.Context(),time.Duration(timeout) *time.Millisecond)
-  defer cancelFunc()
-   
-  r = r.WithContext(timeoutRequest)
-   
-  _, err := http.DefaultClient.Do(r)
-
-  d := time.Since(timeStart)
-  timing:= d.Seconds() * float64(time.Second/time.Millisecond)
-  if err != nil {
-    fmt.Println("Error:", err)
-    return RequestResult { url, timing, err.Error() }
-  } 
-  return RequestResult { url, timing, "" }
-}
-
-func doEvery(d time.Duration, options LoadTestRequest, f func(int, string)[]RequestResult)[]RequestResult {
-  timeStart := time.Now()
-  xx := make([]RequestResult, 0)
+  results := make([]RequestResult, 0)
   for x := range time.Tick(d) {
-    vv := f(options.RequestsPerSecond, options.Url)
-    xx = append(xx,vv...)
+    chunkedResult := f()
+    results = append(results,chunkedResult...)
     d := time.Since(timeStart)
     timing := d.Seconds() * float64(time.Second/time.Millisecond)
-    if timing > options.RequestsPerSecondDuration {
-      return xx
+    if timing > tester.Options.RequestsPerSecondDuration {
+      return results
     }
    fmt.Println(x)
   }
-  return xx
+  return results
 }
 
-func launchPerSecond(options LoadTestRequest) []RequestResult {
+func(tester *LoadTest) launchPerSecond() []RequestResult {
   wg := new(sync.WaitGroup)
-  in := make(chan string, 2 * options.Concurrency)
+  in := make(chan string, 2 * tester.Options.Concurrency)
   results := make([]RequestResult, 0)
-  for i := 0; i < options.Concurrency; i++ {
+  for i := 0; i < tester.Options.Concurrency; i++ {
     wg.Add(1)
     go func() {
       defer wg.Done()
       for j := 0; j < len(in); j++ {
-        rps := doEvery(time.Second, options, makeRequests)
+        rps := tester.doEvery(time.Second, tester.makeRequests)
         results = append(results, rps...)
       }
     }()
   }
-  for j := 0; j < options.Concurrency; j++ {
+  for j := 0; j < tester.Options.Concurrency; j++ {
     in <- "rps"+strconv.Itoa(j)
   }
   close(in)
@@ -123,26 +117,13 @@ func launchPerSecond(options LoadTestRequest) []RequestResult {
   return results
 }
 
-func getConcurrency(concurrency int, maxRequests int) int {
-  temp := (maxRequests - concurrency)
-  if temp > 0 && maxRequests > concurrency {
-    return concurrency
-  } else if temp < 0 {
-    return maxRequests
-  }
-  return 0
-}
+func(tester *LoadTest) blast()[]RequestResult {
+  limit := tester.Options.MaxRequests
 
-func blast(options LoadTestRequest)[]RequestResult {
-  limit := options.MaxRequests
-  //client := clients.NewHttpClient(options.Type, options.Url, options.Body, options.ContentType)
- // x := make([]float64, 0)
-  xx := make([]RequestResult, 0)
-  //y := make([]int, options.MaxRequests)
+  results := make([]RequestResult, 0)
+
   for limit > 0 {
-    //make sure we do not send more than the max request
-    //var workers = 3 //options.Concurrency //getConcurrency(Options.concurrency, limit)
-    workers := make([]int, getConcurrency(options.Concurrency, limit))
+    workers := make([]int, getConcurrency(tester.Options.Concurrency, limit))
     wg := new(sync.WaitGroup)
     in := make(chan string, 2 * len(workers))
 
@@ -152,8 +133,7 @@ func blast(options LoadTestRequest)[]RequestResult {
         defer wg.Done()
         for url := range in {
           fmt.Println(url)
-          //3000 should be replaced with options.RequestTimeout
-          xx = append(xx, fetch("http://www.google.com", 3000))
+          results = append(results, fetch(tester.client, tester.Options.Url))
         }
       }()
     }
@@ -166,15 +146,14 @@ func blast(options LoadTestRequest)[]RequestResult {
     wg.Wait()
     limit--
   }
-  return xx
-
+  return results
 }
 
 func(tester *LoadTest) Start() []RequestResult {
   if tester.Options.RequestsPerSecond > 0 {
-    return launchPerSecond(tester.Options)
+    return tester.launchPerSecond()
   } else {
-    return blast(tester.Options)
+    return tester.blast()
   }
 }
 
