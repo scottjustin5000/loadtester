@@ -52,9 +52,9 @@ func main() {
  requestTypePtr := flag.String("rt", "GET", "request type")
  requestsPerSecondPtr := flag.Int("rps", 0, "requests per second")
  bodyPtr := flag.String("b", "", "json string representation of request payload")
-
+ 
+ flag.Parse()
  requestType := determineRequestType(*requestTypePtr)
-
 
  client := loadtest.NewLoadTest(loadtest.LoadTestRequest{Url:*urlPtr, RequestTimeout: *requestTimeoutPtr, Concurrency:*concurrencyPtr, MaxRequests:*maxRequestPtr, Body:*bodyPtr, RequestsPerSecond: *requestsPerSecondPtr, Type: requestType})
  x := client.Start()
