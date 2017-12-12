@@ -51,12 +51,13 @@ func main() {
  requestTimeoutPtr := flag.Int("t", 60000, "timeout per requests (ms)")
  requestTypePtr := flag.String("rt", "GET", "request type")
  requestsPerSecondPtr := flag.Int("rps", 0, "requests per second")
+ requestsPerSecondDurationPtr := flag.Float64("d", 60000, "request per second duration")
  bodyPtr := flag.String("b", "", "json string representation of request payload")
  
  flag.Parse()
  requestType := determineRequestType(*requestTypePtr)
 
- client := loadtest.NewLoadTest(loadtest.LoadTestRequest{Url:*urlPtr, RequestTimeout: *requestTimeoutPtr, Concurrency:*concurrencyPtr, MaxRequests:*maxRequestPtr, Body:*bodyPtr, RequestsPerSecond: *requestsPerSecondPtr, Type: requestType})
+ client := loadtest.NewLoadTest(loadtest.LoadTestRequest{Url:*urlPtr, RequestTimeout: *requestTimeoutPtr, Concurrency:*concurrencyPtr, MaxRequests:*maxRequestPtr, Body:*bodyPtr, RequestsPerSecond: *requestsPerSecondPtr, Type: requestType, RequestsPerSecondDuration: *requestsPerSecondDurationPtr})
  x := client.Start()
  fmt.Println(x)
 
